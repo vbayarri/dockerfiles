@@ -11,14 +11,35 @@ if [ -z "$SSH_AUTH_SOCK" ]; then
     echo "  Ejemplo: eval \$(ssh-agent -s) && ssh-add ~/.ssh/id_ed25519_sk"
 fi
 
-# --- 1. CONSTRUIR LA IMAGEN ---
-echo "⚙️ Construyendo la imagen Docker: $IMAGE_NAME"
-# La construcción utiliza el Dockerfile en el directorio actual
-docker build -t "$IMAGE_NAME" .
+# --- 1. CONSTRUIR LA IMAGEN (solo si no existe o hay actualizaciones) ---
+# Primero, verificar si hay actualizaciones de la imagen base Alpine
+echo "🔍 Verificando actualizaciones de Alpine..."
+ALPINE_BEFORE=$(docker images -q alpine:latest)
+docker pull alpine:latest --quiet
+ALPINE_AFTER=$(docker images -q alpine:latest)
 
-if [ $? -ne 0 ]; then
-    echo "❌ Error al construir la imagen. Abortando."
-    exit 1
+# Determinar si necesitamos reconstruir
+NEEDS_REBUILD=false
+
+if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+    echo "⚙️ Imagen no encontrada. Construyendo la imagen Docker: $IMAGE_NAME"
+    NEEDS_REBUILD=true
+elif [ "$ALPINE_BEFORE" != "$ALPINE_AFTER" ]; then
+    echo "🆕 Nueva versión de Alpine detectada. Reconstruyendo imagen..."
+    NEEDS_REBUILD=true
+else
+    echo "✅ Imagen $IMAGE_NAME ya existe y está actualizada. Saltando construcción."
+    echo "   (Para reconstruir manualmente, ejecuta: docker rmi $IMAGE_NAME)"
+fi
+
+# Construir si es necesario
+if [ "$NEEDS_REBUILD" = true ]; then
+    docker build -t "$IMAGE_NAME" .
+
+    if [ $? -ne 0 ]; then
+        echo "❌ Error al construir la imagen. Abortando."
+        exit 1
+    fi
 fi
 
 # --- 2. EJECUTAR EL CONTENEDOR TEMPORAL E INTERACTIVO ---
