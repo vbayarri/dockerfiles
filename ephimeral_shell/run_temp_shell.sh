@@ -26,23 +26,35 @@ echo "🚀 Ejecutando el contenedor temporal e interactivo. Escribe 'exit' para 
 
 # Define los comandos de inicio: Clonar dotfiles y luego iniciar Bash
 INIT_COMMANDS="
+    # 0. Configurar SSH known_hosts para GitHub (evitar prompt interactivo)
+    mkdir -p ~/.ssh
+    ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+
     # 1. Comando de clonación de dotfiles (Ajusta la URL de tu repositorio)
     # Usamos HTTPS si la clave SSH no se carga automáticamente, o SSH si usas la clave YubiKey.
     # Recomendación: Si usas YubiKey, usa SSH. Si no, usa HTTPS.
-    git clone git@github.com:vbayarri/dotfiles.git ~/dotfiles
+    if git clone git@github.com:vbayarri/dotfiles.git ~/dotfiles; then
+        echo '✅ Dotfiles clonados exitosamente'
 
-    # 2. Comando para inicializar tus dotfiles (ej. un script de setup)
-    ~/dotfiles/scripts/install-dependencies.sh
+        # 2. Comando para inicializar tus dotfiles (ej. un script de setup)
+        if [ -f ~/dotfiles/scripts/install-dependencies.sh ]; then
+            ~/dotfiles/scripts/install-dependencies.sh > /dev/null 2>&1
+            echo '✅ Dotfiles configurados exitosamente'
+        else
+            echo '⚠️ Script install-dependencies.sh no encontrado, saltando...'
+        fi
+    else
+        echo '❌ Error al clonar dotfiles. Continuando sin dotfiles...'
+    fi
 
-    # 3. Iniciar la shell interactiva
-    /bin/zsh
+    # 3. Iniciar la shell interactiva en el directorio home
+    cd ~ && /bin/zsh
 "
 
 docker run \
     --rm \
     -it \
     --name "$CONTAINER_NAME" \
-    -w /app \
     -v "$(pwd)":/app \
     -v "$SSH_AUTH_SOCK":"$SSH_AUTH_SOCK" \
     -e SSH_AUTH_SOCK="$SSH_AUTH_SOCK" \
